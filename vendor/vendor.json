@@ -1,0 +1,37 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "0XcTmMd+Tjgl5DtptaldEekxg3Q=",
+			"path": "github.com/gin-gonic/gin",
+			"revision": "4a23c4f7b9ced6b8e4476f2e021a61165153b71d",
+			"revisionTime": "2019-03-11T02:52:47Z"
+		},
+		{
+			"checksumSHA1": "JQPCz2eb1nfugBO9WWLrUCR7C9E=",
+			"path": "github.com/go-redis/redis",
+			"revision": "f8704e4b6b43ad8e687c926a0235c6e33dfc4a64",
+			"revisionTime": "2019-06-09T09:29:23Z"
+		},
+		{
+			"checksumSHA1": "2Rz4WU6It2rzQgvAjq8f0ZiT/iI=",
+			"path": "github.com/go-xorm/xorm",
+			"revision": "6a1dd5973789318df3a253c0d42345ac5a9abd00",
+			"revisionTime": "2019-05-06T08:23:39Z"
+		},
+		{
+			"checksumSHA1": "BKXPIqMlpj20qhEM+7luvOl2PpM=",
+			"path": "github.com/streadway/amqp",
+			"revision": "cb4fb930736ebd61a54da180a6aa4e92b206ff13",
+			"revisionTime": "2016-12-10T20:40:49Z"
+		},
+		{
+			"checksumSHA1": "DNACggtMQc6inc8pqg6kUwBi1pU=",
+			"path": "qxf-backend/logger",
+			"revision": "943ab5ce2fecf726fb71f7965639bb8a46315f8c",
+			"revisionTime": "2019-07-02T06:49:58Z"
+		}
+	],
+	"rootPath": "myGoService"
+}
