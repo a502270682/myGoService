@@ -2,8 +2,8 @@ package buslogic
 
 import (
 	"github.com/gin-gonic/gin"
-	"goServices/model"
-	"goServices/code"
+	"myGoService/model"
+	"myGoService/code"
 )
 
 type WorkFlow struct {

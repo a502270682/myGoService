@@ -1,7 +1,7 @@
 package service
 
 import (
-	"goServices/buslogic"
+	"myGoService/buslogic"
 )
 
 type Service struct {
