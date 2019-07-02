@@ -5,13 +5,13 @@ import (
 	"os/signal"
 	"syscall"
 	"qxf-backend/logger"
-	"goServices/service"
+	"myGoService/service"
 	"context"
 	"time"
 	"net/http"
-	"goServices/model"
-	"goServices/config"
-	"goServices/model/rabbitmq"
+	"myGoService/model"
+	"myGoService/config"
+	"myGoService/model/rabbitmq"
 )
 
 func main() {

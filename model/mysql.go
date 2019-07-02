@@ -2,7 +2,7 @@ package model
 
 import (
 	"github.com/go-xorm/xorm"
-	"goServices/config"
+	"myGoService/config"
 	_ "github.com/go-sql-driver/mysql"
 	"qxf-backend/logger"
 	"time"

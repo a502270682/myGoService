@@ -3,7 +3,7 @@ package model
 import (
 	"github.com/go-redis/redis"
 	"github.com/go-xorm/xorm"
-	"goServices/config"
+	"myGoService/config"
 	"qxf-backend/logger"
 )
 

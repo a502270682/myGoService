@@ -2,7 +2,7 @@ package rabbitmq
 
 import (
 	"github.com/streadway/amqp"
-	"goServices/config"
+	"myGoService/config"
 	"qxf-backend/logger"
 	"sync"
 	"time"
