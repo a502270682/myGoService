@@ -9,12 +9,60 @@
 			"revisionTime": "2019-03-11T02:52:47Z"
 		},
 		{
+<<<<<<< HEAD
+=======
+			"checksumSHA1": "rST0S8cuVbM57VmJhWXhKNUkKTc=",
+			"path": "github.com/gin-gonic/gin/internal/json",
+			"revision": "4a23c4f7b9ced6b8e4476f2e021a61165153b71d",
+			"revisionTime": "2019-03-11T02:52:47Z"
+		},
+		{
+>>>>>>> govendor:add govendor dir
 			"checksumSHA1": "JQPCz2eb1nfugBO9WWLrUCR7C9E=",
 			"path": "github.com/go-redis/redis",
 			"revision": "f8704e4b6b43ad8e687c926a0235c6e33dfc4a64",
 			"revisionTime": "2019-06-09T09:29:23Z"
 		},
 		{
+<<<<<<< HEAD
+=======
+			"checksumSHA1": "tZJRl4B7hKoRe+nWAMA4JtsM7Kc=",
+			"path": "github.com/go-redis/redis/internal",
+			"revision": "f8704e4b6b43ad8e687c926a0235c6e33dfc4a64",
+			"revisionTime": "2019-06-09T09:29:23Z"
+		},
+		{
+			"checksumSHA1": "GQZsUVg/+6UpQAYpc4luMvMutSI=",
+			"path": "github.com/go-redis/redis/internal/consistenthash",
+			"revision": "f8704e4b6b43ad8e687c926a0235c6e33dfc4a64",
+			"revisionTime": "2019-06-09T09:29:23Z"
+		},
+		{
+			"checksumSHA1": "l66eTZiJqueypc56HXCakGDm784=",
+			"path": "github.com/go-redis/redis/internal/hashtag",
+			"revision": "f8704e4b6b43ad8e687c926a0235c6e33dfc4a64",
+			"revisionTime": "2019-06-09T09:29:23Z"
+		},
+		{
+			"checksumSHA1": "JYkA0l4mZ6WaB8mpGq/uy9bkpxI=",
+			"path": "github.com/go-redis/redis/internal/pool",
+			"revision": "f8704e4b6b43ad8e687c926a0235c6e33dfc4a64",
+			"revisionTime": "2019-06-09T09:29:23Z"
+		},
+		{
+			"checksumSHA1": "zCo0t+gRBbctwyIpkDLrqRFtXew=",
+			"path": "github.com/go-redis/redis/internal/proto",
+			"revision": "f8704e4b6b43ad8e687c926a0235c6e33dfc4a64",
+			"revisionTime": "2019-06-09T09:29:23Z"
+		},
+		{
+			"checksumSHA1": "1PH2NoAB/u3IZmLYyCrIbOzqLZ4=",
+			"path": "github.com/go-redis/redis/internal/util",
+			"revision": "f8704e4b6b43ad8e687c926a0235c6e33dfc4a64",
+			"revisionTime": "2019-06-09T09:29:23Z"
+		},
+		{
+>>>>>>> govendor:add govendor dir
 			"checksumSHA1": "2Rz4WU6It2rzQgvAjq8f0ZiT/iI=",
 			"path": "github.com/go-xorm/xorm",
 			"revision": "6a1dd5973789318df3a253c0d42345ac5a9abd00",
