@@ -1,8 +1,6 @@
 package redis
 
 import (
-	"context"
-
 	"github.com/go-redis/redis/internal/pool"
 	"github.com/go-redis/redis/internal/proto"
 )
@@ -15,11 +13,8 @@ const TxFailedErr = proto.RedisError("redis: transaction failed")
 // by multiple goroutines, because Exec resets list of watched keys.
 // If you don't need WATCH it is better to use Pipeline.
 type Tx struct {
-	cmdable
 	statefulCmdable
 	baseClient
-
-	ctx context.Context
 }
 
 func (c *Client) newTx() *Tx {
@@ -28,39 +23,10 @@ func (c *Client) newTx() *Tx {
 			opt:      c.opt,
 			connPool: pool.NewStickyConnPool(c.connPool.(*pool.ConnPool), true),
 		},
-		ctx: c.ctx,
 	}
-	tx.init()
+	tx.baseClient.init()
+	tx.statefulCmdable.setProcessor(tx.Process)
 	return &tx
-}
-
-func (c *Tx) init() {
-	c.cmdable = c.Process
-	c.statefulCmdable = c.Process
-}
-
-func (c *Tx) Context() context.Context {
-	if c.ctx != nil {
-		return c.ctx
-	}
-	return context.Background()
-}
-
-func (c *Tx) WithContext(ctx context.Context) *Tx {
-	if ctx == nil {
-		panic("nil context")
-	}
-	clone := *c
-	clone.ctx = ctx
-	return &clone
-}
-
-func (c *Tx) Process(cmd Cmder) error {
-	return c.ProcessContext(c.ctx, cmd)
-}
-
-func (c *Tx) ProcessContext(ctx context.Context, cmd Cmder) error {
-	return c.baseClient.process(ctx, cmd)
 }
 
 // Watch prepares a transaction and marks the keys to be watched
@@ -117,7 +83,7 @@ func (c *Tx) Pipeline() Pipeliner {
 	pipe := Pipeline{
 		exec: c.processTxPipeline,
 	}
-	pipe.init()
+	pipe.statefulCmdable.setProcessor(pipe.Process)
 	return &pipe
 }
 

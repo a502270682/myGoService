@@ -1,17 +1,17 @@
 package main
 
 import (
+	"context"
+	logger "github.com/sirupsen/logrus"
+	"myGoService/config"
+	"myGoService/model"
+	"myGoService/model/rabbitmq"
+	"myGoService/service"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"qxf-backend/logger"
-	"myGoService/service"
-	"context"
 	"time"
-	"net/http"
-	"myGoService/model"
-	"myGoService/config"
-	"myGoService/model/rabbitmq"
 )
 
 func main() {
@@ -24,7 +24,7 @@ func main() {
 		Handler: s.Wf.Router,
 	}
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Kill, os.Interrupt, syscall.SIGBUS, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGTERM)
+	signal.Notify(signals, os.Kill, os.Interrupt, syscall.SIGBUS, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM)
 	<-signals
 	logger.Info("service start to shut down")
 

@@ -3,8 +3,8 @@ package model
 import (
 	"github.com/go-redis/redis"
 	"github.com/go-xorm/xorm"
+	logger "github.com/sirupsen/logrus"
 	"myGoService/config"
-	"qxf-backend/logger"
 )
 
 type Model struct {

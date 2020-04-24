@@ -1,10 +1,10 @@
 package test
 
 import (
-	"testing"
-	"myGoService/model"
-	"time"
 	"fmt"
+	"myGoService/model"
+	"testing"
+	"time"
 )
 
 func TestCache(t *testing.T) {

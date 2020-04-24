@@ -2,8 +2,8 @@ package model
 
 import (
 	"github.com/go-redis/redis"
+	logger "github.com/sirupsen/logrus"
 	"myGoService/config"
-	"qxf-backend/logger"
 )
 
 func (m *Model) InitRedisClient(redisDB int) {

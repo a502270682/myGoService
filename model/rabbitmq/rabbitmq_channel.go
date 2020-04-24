@@ -3,8 +3,8 @@ package rabbitmq
 import (
 	"context"
 	"fmt"
+	logger "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
-	"qxf-backend/logger"
 	"time"
 )
 

@@ -2,14 +2,14 @@ package buslogic
 
 import (
 	"context"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
+	logger "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"myGoService/code"
 	"myGoService/config"
 	"myGoService/model/rabbitmq"
-	qe "qxf-backend/error"
-	"qxf-backend/logger"
 	"time"
 )
 
@@ -61,10 +61,10 @@ func (wf *WorkFlow) GetLoginMessageQueue(ctx *gin.Context) {
 func (wf *WorkFlow) CheckUserLoginPassword(lr *LoginRequest) error {
 	user, err := wf.M.GetUserById(lr.UserId)
 	if err != nil {
-		return qe.NewQError("获取用户信息失败", err)
+		return errors.New("获取用户信息失败")
 	}
 	if user.Password != lr.Password {
-		return qe.NewQError("用户验证密码失败", err)
+		return errors.New("用户验证密码失败")
 	}
 	return nil
 }

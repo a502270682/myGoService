@@ -1,7 +1,6 @@
 package redis
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -84,8 +83,8 @@ func (c *PubSub) _conn(newChannels []string) (*pool.Conn, error) {
 	return cn, nil
 }
 
-func (c *PubSub) writeCmd(ctx context.Context, cn *pool.Conn, cmd Cmder) error {
-	return cn.WithWriter(ctx, c.opt.WriteTimeout, func(wr *proto.Writer) error {
+func (c *PubSub) writeCmd(cn *pool.Conn, cmd Cmder) error {
+	return cn.WithWriter(c.opt.WriteTimeout, func(wr *proto.Writer) error {
 		return writeCmd(wr, cmd)
 	})
 }
@@ -129,7 +128,7 @@ func (c *PubSub) _subscribe(
 		args = append(args, channel)
 	}
 	cmd := NewSliceCmd(args...)
-	return c.writeCmd(context.TODO(), cn, cmd)
+	return c.writeCmd(cn, cmd)
 }
 
 func (c *PubSub) releaseConn(cn *pool.Conn, err error, allowTimeout bool) {
@@ -259,7 +258,7 @@ func (c *PubSub) Ping(payload ...string) error {
 		return err
 	}
 
-	err = c.writeCmd(context.TODO(), cn, cmd)
+	err = c.writeCmd(cn, cmd)
 	c.releaseConn(cn, err, false)
 	return err
 }
@@ -351,7 +350,7 @@ func (c *PubSub) ReceiveTimeout(timeout time.Duration) (interface{}, error) {
 		return nil, err
 	}
 
-	err = cn.WithReader(context.TODO(), timeout, func(rd *proto.Reader) error {
+	err = cn.WithReader(timeout, func(rd *proto.Reader) error {
 		return c.cmd.readReply(rd)
 	})
 

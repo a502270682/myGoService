@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-xorm/core"
+	"xorm.io/core"
 )
 
 func (session *Session) str2Time(col *core.Column, data string) (outTime time.Time, outErr error) {
@@ -83,6 +83,10 @@ func (session *Session) str2Time(col *core.Column, data string) (outTime time.Ti
 func (session *Session) byte2Time(col *core.Column, data []byte) (outTime time.Time, outErr error) {
 	return session.str2Time(col, string(data))
 }
+
+var (
+	nullFloatType = reflect.TypeOf(sql.NullFloat64{})
+)
 
 // convert a db data([]byte) to a field value
 func (session *Session) bytes2Value(col *core.Column, fieldValue *reflect.Value, data []byte) error {
@@ -583,6 +587,12 @@ func (session *Session) value2Interface(col *core.Column, fieldValue reflect.Val
 			t := fieldValue.Convert(core.TimeType).Interface().(time.Time)
 			tf := session.engine.formatColTime(col, t)
 			return tf, nil
+		} else if fieldType.ConvertibleTo(nullFloatType) {
+			t := fieldValue.Convert(nullFloatType).Interface().(sql.NullFloat64)
+			if !t.Valid {
+				return nil, nil
+			}
+			return t.Float64, nil
 		}
 
 		if !col.SQLType.IsJson() {
@@ -640,7 +650,7 @@ func (session *Session) value2Interface(col *core.Column, fieldValue reflect.Val
 		} else if col.SQLType.IsBlob() {
 			var bytes []byte
 			var err error
-			if (k == reflect.Array || k == reflect.Slice) &&
+			if (k == reflect.Slice) &&
 				(fieldValue.Type().Elem().Kind() == reflect.Uint8) {
 				bytes = fieldValue.Bytes()
 			} else {

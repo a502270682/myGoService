@@ -100,14 +100,8 @@ type baseCmd struct {
 
 var _ Cmder = (*Cmd)(nil)
 
-func (cmd *baseCmd) Name() string {
-	if len(cmd._args) > 0 {
-		// Cmd name must be lower cased.
-		s := internal.ToLower(cmd.stringArg(0))
-		cmd._args[0] = s
-		return s
-	}
-	return ""
+func (cmd *baseCmd) Err() error {
+	return cmd.err
 }
 
 func (cmd *baseCmd) Args() []interface{} {
@@ -122,8 +116,14 @@ func (cmd *baseCmd) stringArg(pos int) string {
 	return s
 }
 
-func (cmd *baseCmd) Err() error {
-	return cmd.err
+func (cmd *baseCmd) Name() string {
+	if len(cmd._args) > 0 {
+		// Cmd name must be lower cased.
+		s := internal.ToLower(cmd.stringArg(0))
+		cmd._args[0] = s
+		return s
+	}
+	return ""
 }
 
 func (cmd *baseCmd) readTimeout() *time.Duration {
@@ -439,14 +439,7 @@ func (cmd *DurationCmd) readReply(rd *proto.Reader) error {
 	if cmd.err != nil {
 		return cmd.err
 	}
-	switch n {
-	// -2 if the key does not exist
-	// -1 if the key exists but has no associated expire
-	case -2, -1:
-		cmd.val = time.Duration(n)
-	default:
-		cmd.val = time.Duration(n) * cmd.precision
-	}
+	cmd.val = time.Duration(n) * cmd.precision
 	return nil
 }
 
@@ -1006,14 +999,20 @@ func xMessageSliceParser(rd *proto.Reader, n int64) (interface{}, error) {
 				return nil, err
 			}
 
+			var values map[string]interface{}
+
 			v, err := rd.ReadArrayReply(stringInterfaceMapParser)
 			if err != nil {
-				return nil, err
+				if err != proto.Nil {
+					return nil, err
+				}
+			} else {
+				values = v.(map[string]interface{})
 			}
 
 			msgs = append(msgs, XMessage{
 				ID:     id,
-				Values: v.(map[string]interface{}),
+				Values: values,
 			})
 			return nil, nil
 		})
@@ -1227,7 +1226,7 @@ func xPendingParser(rd *proto.Reader, n int64) (interface{}, error) {
 //------------------------------------------------------------------------------
 
 type XPendingExt struct {
-	ID         string
+	Id         string
 	Consumer   string
 	Idle       time.Duration
 	RetryCount int64
@@ -1297,7 +1296,7 @@ func xPendingExtSliceParser(rd *proto.Reader, n int64) (interface{}, error) {
 			}
 
 			ret = append(ret, XPendingExt{
-				ID:         id,
+				Id:         id,
 				Consumer:   consumer,
 				Idle:       time.Duration(idle) * time.Millisecond,
 				RetryCount: retryCount,
@@ -1377,7 +1376,7 @@ func zSliceParser(rd *proto.Reader, n int64) (interface{}, error) {
 type ZWithKeyCmd struct {
 	baseCmd
 
-	val *ZWithKey
+	val ZWithKey
 }
 
 var _ Cmder = (*ZWithKeyCmd)(nil)
@@ -1388,11 +1387,11 @@ func NewZWithKeyCmd(args ...interface{}) *ZWithKeyCmd {
 	}
 }
 
-func (cmd *ZWithKeyCmd) Val() *ZWithKey {
+func (cmd *ZWithKeyCmd) Val() ZWithKey {
 	return cmd.val
 }
 
-func (cmd *ZWithKeyCmd) Result() (*ZWithKey, error) {
+func (cmd *ZWithKeyCmd) Result() (ZWithKey, error) {
 	return cmd.Val(), cmd.Err()
 }
 
@@ -1406,7 +1405,7 @@ func (cmd *ZWithKeyCmd) readReply(rd *proto.Reader) error {
 	if cmd.err != nil {
 		return cmd.err
 	}
-	cmd.val = v.(*ZWithKey)
+	cmd.val = v.(ZWithKey)
 	return nil
 }
 
@@ -1431,8 +1430,7 @@ func zWithKeyParser(rd *proto.Reader, n int64) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	return &z, nil
+	return z, nil
 }
 
 //------------------------------------------------------------------------------
@@ -1795,23 +1793,7 @@ func (cmd *GeoPosCmd) readReply(rd *proto.Reader) error {
 func geoPosSliceParser(rd *proto.Reader, n int64) (interface{}, error) {
 	positions := make([]*GeoPos, 0, n)
 	for i := int64(0); i < n; i++ {
-		_, err := rd.ReadReply(func(rd *proto.Reader, n int64) (interface{}, error) {
-			var pos GeoPos
-			var err error
-
-			pos.Longitude, err = rd.ReadFloatReply()
-			if err != nil {
-				return nil, err
-			}
-
-			pos.Latitude, err = rd.ReadFloatReply()
-			if err != nil {
-				return nil, err
-			}
-
-			positions = append(positions, &pos)
-			return nil, nil
-		})
+		v, err := rd.ReadReply(geoPosParser)
 		if err != nil {
 			if err == Nil {
 				positions = append(positions, nil)
@@ -1819,8 +1801,31 @@ func geoPosSliceParser(rd *proto.Reader, n int64) (interface{}, error) {
 			}
 			return nil, err
 		}
+		switch v := v.(type) {
+		case *GeoPos:
+			positions = append(positions, v)
+		default:
+			return nil, fmt.Errorf("got %T, expected *GeoPos", v)
+		}
 	}
 	return positions, nil
+}
+
+func geoPosParser(rd *proto.Reader, n int64) (interface{}, error) {
+	var pos GeoPos
+	var err error
+
+	pos.Longitude, err = rd.ReadFloatReply()
+	if err != nil {
+		return nil, err
+	}
+
+	pos.Latitude, err = rd.ReadFloatReply()
+	if err != nil {
+		return nil, err
+	}
+
+	return &pos, nil
 }
 
 //------------------------------------------------------------------------------

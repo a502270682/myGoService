@@ -23,116 +23,22 @@ func SetLogger(logger *log.Logger) {
 	internal.Logger = logger
 }
 
-//------------------------------------------------------------------------------
-
-type Hook interface {
-	BeforeProcess(ctx context.Context, cmd Cmder) (context.Context, error)
-	AfterProcess(ctx context.Context, cmd Cmder) (context.Context, error)
-
-	BeforeProcessPipeline(ctx context.Context, cmds []Cmder) (context.Context, error)
-	AfterProcessPipeline(ctx context.Context, cmds []Cmder) (context.Context, error)
-}
-
-type hooks struct {
-	hooks []Hook
-}
-
-func (hs *hooks) lazyCopy() {
-	hs.hooks = hs.hooks[:len(hs.hooks):len(hs.hooks)]
-}
-
-func (hs *hooks) AddHook(hook Hook) {
-	hs.hooks = append(hs.hooks, hook)
-}
-
-func (hs hooks) process(
-	ctx context.Context, cmd Cmder, fn func(context.Context, Cmder) error,
-) error {
-	ctx, err := hs.beforeProcess(ctx, cmd)
-	if err != nil {
-		return err
-	}
-
-	cmdErr := fn(ctx, cmd)
-
-	_, err = hs.afterProcess(ctx, cmd)
-	if err != nil {
-		return err
-	}
-
-	return cmdErr
-}
-
-func (hs hooks) beforeProcess(ctx context.Context, cmd Cmder) (context.Context, error) {
-	for _, h := range hs.hooks {
-		var err error
-		ctx, err = h.BeforeProcess(ctx, cmd)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ctx, nil
-}
-
-func (hs hooks) afterProcess(ctx context.Context, cmd Cmder) (context.Context, error) {
-	for _, h := range hs.hooks {
-		var err error
-		ctx, err = h.AfterProcess(ctx, cmd)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ctx, nil
-}
-
-func (hs hooks) processPipeline(
-	ctx context.Context, cmds []Cmder, fn func(context.Context, []Cmder) error,
-) error {
-	ctx, err := hs.beforeProcessPipeline(ctx, cmds)
-	if err != nil {
-		return err
-	}
-
-	cmdsErr := fn(ctx, cmds)
-
-	_, err = hs.afterProcessPipeline(ctx, cmds)
-	if err != nil {
-		return err
-	}
-
-	return cmdsErr
-}
-
-func (hs hooks) beforeProcessPipeline(ctx context.Context, cmds []Cmder) (context.Context, error) {
-	for _, h := range hs.hooks {
-		var err error
-		ctx, err = h.BeforeProcessPipeline(ctx, cmds)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ctx, nil
-}
-
-func (hs hooks) afterProcessPipeline(ctx context.Context, cmds []Cmder) (context.Context, error) {
-	for _, h := range hs.hooks {
-		var err error
-		ctx, err = h.AfterProcessPipeline(ctx, cmds)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ctx, nil
-}
-
-//------------------------------------------------------------------------------
-
 type baseClient struct {
 	opt      *Options
 	connPool pool.Pooler
 	limiter  Limiter
 
+	process           func(Cmder) error
+	processPipeline   func([]Cmder) error
+	processTxPipeline func([]Cmder) error
+
 	onClose func() error // hook called when client is closed
+}
+
+func (c *baseClient) init() {
+	c.process = c.defaultProcess
+	c.processPipeline = c.defaultProcessPipeline
+	c.processTxPipeline = c.defaultProcessTxPipeline
 }
 
 func (c *baseClient) String() string {
@@ -154,7 +60,7 @@ func (c *baseClient) newConn() (*pool.Conn, error) {
 	return cn, nil
 }
 
-func (c *baseClient) getConn(ctx context.Context) (*pool.Conn, error) {
+func (c *baseClient) getConn() (*pool.Conn, error) {
 	if c.limiter != nil {
 		err := c.limiter.Allow()
 		if err != nil {
@@ -162,7 +68,7 @@ func (c *baseClient) getConn(ctx context.Context) (*pool.Conn, error) {
 		}
 	}
 
-	cn, err := c._getConn(ctx)
+	cn, err := c._getConn()
 	if err != nil {
 		if c.limiter != nil {
 			c.limiter.ReportResult(err)
@@ -172,15 +78,18 @@ func (c *baseClient) getConn(ctx context.Context) (*pool.Conn, error) {
 	return cn, nil
 }
 
-func (c *baseClient) _getConn(ctx context.Context) (*pool.Conn, error) {
-	cn, err := c.connPool.Get(ctx)
+func (c *baseClient) _getConn() (*pool.Conn, error) {
+	cn, err := c.connPool.Get()
 	if err != nil {
 		return nil, err
 	}
 
 	err = c.initConn(cn)
 	if err != nil {
-		c.connPool.Remove(cn)
+		c.connPool.Remove(cn, err)
+		if err := internal.Unwrap(err); err != nil {
+			return nil, err
+		}
 		return nil, err
 	}
 
@@ -193,7 +102,7 @@ func (c *baseClient) releaseConn(cn *pool.Conn, err error) {
 	}
 
 	if internal.IsBadConn(err, false) {
-		c.connPool.Remove(cn)
+		c.connPool.Remove(cn, err)
 	} else {
 		c.connPool.Put(cn)
 	}
@@ -207,7 +116,7 @@ func (c *baseClient) releaseConnStrict(cn *pool.Conn, err error) {
 	if err == nil || internal.IsRedisError(err) {
 		c.connPool.Put(cn)
 	} else {
-		c.connPool.Remove(cn)
+		c.connPool.Remove(cn, err)
 	}
 }
 
@@ -250,13 +159,31 @@ func (c *baseClient) initConn(cn *pool.Conn) error {
 	return nil
 }
 
-func (c *baseClient) process(ctx context.Context, cmd Cmder) error {
+// Do creates a Cmd from the args and processes the cmd.
+func (c *baseClient) Do(args ...interface{}) *Cmd {
+	cmd := NewCmd(args...)
+	_ = c.Process(cmd)
+	return cmd
+}
+
+// WrapProcess wraps function that processes Redis commands.
+func (c *baseClient) WrapProcess(
+	fn func(oldProcess func(cmd Cmder) error) func(cmd Cmder) error,
+) {
+	c.process = fn(c.process)
+}
+
+func (c *baseClient) Process(cmd Cmder) error {
+	return c.process(cmd)
+}
+
+func (c *baseClient) defaultProcess(cmd Cmder) error {
 	for attempt := 0; attempt <= c.opt.MaxRetries; attempt++ {
 		if attempt > 0 {
 			time.Sleep(c.retryBackoff(attempt))
 		}
 
-		cn, err := c.getConn(ctx)
+		cn, err := c.getConn()
 		if err != nil {
 			cmd.setErr(err)
 			if internal.IsRetryableError(err, true) {
@@ -265,7 +192,7 @@ func (c *baseClient) process(ctx context.Context, cmd Cmder) error {
 			return err
 		}
 
-		err = cn.WithWriter(ctx, c.opt.WriteTimeout, func(wr *proto.Writer) error {
+		err = cn.WithWriter(c.opt.WriteTimeout, func(wr *proto.Writer) error {
 			return writeCmd(wr, cmd)
 		})
 		if err != nil {
@@ -277,7 +204,7 @@ func (c *baseClient) process(ctx context.Context, cmd Cmder) error {
 			return err
 		}
 
-		err = cn.WithReader(ctx, c.cmdTimeout(cmd), cmd.readReply)
+		err = cn.WithReader(c.cmdTimeout(cmd), cmd.readReply)
 		c.releaseConn(cn, err)
 		if err != nil && internal.IsRetryableError(err, cmd.readTimeout() == nil) {
 			continue
@@ -325,31 +252,36 @@ func (c *baseClient) getAddr() string {
 	return c.opt.Addr
 }
 
-func (c *baseClient) processPipeline(ctx context.Context, cmds []Cmder) error {
-	return c.generalProcessPipeline(ctx, cmds, c.pipelineProcessCmds)
+func (c *baseClient) WrapProcessPipeline(
+	fn func(oldProcess func([]Cmder) error) func([]Cmder) error,
+) {
+	c.processPipeline = fn(c.processPipeline)
+	c.processTxPipeline = fn(c.processTxPipeline)
 }
 
-func (c *baseClient) processTxPipeline(ctx context.Context, cmds []Cmder) error {
-	return c.generalProcessPipeline(ctx, cmds, c.txPipelineProcessCmds)
+func (c *baseClient) defaultProcessPipeline(cmds []Cmder) error {
+	return c.generalProcessPipeline(cmds, c.pipelineProcessCmds)
 }
 
-type pipelineProcessor func(context.Context, *pool.Conn, []Cmder) (bool, error)
+func (c *baseClient) defaultProcessTxPipeline(cmds []Cmder) error {
+	return c.generalProcessPipeline(cmds, c.txPipelineProcessCmds)
+}
 
-func (c *baseClient) generalProcessPipeline(
-	ctx context.Context, cmds []Cmder, p pipelineProcessor,
-) error {
+type pipelineProcessor func(*pool.Conn, []Cmder) (bool, error)
+
+func (c *baseClient) generalProcessPipeline(cmds []Cmder, p pipelineProcessor) error {
 	for attempt := 0; attempt <= c.opt.MaxRetries; attempt++ {
 		if attempt > 0 {
 			time.Sleep(c.retryBackoff(attempt))
 		}
 
-		cn, err := c.getConn(ctx)
+		cn, err := c.getConn()
 		if err != nil {
 			setCmdsErr(cmds, err)
 			return err
 		}
 
-		canRetry, err := p(ctx, cn, cmds)
+		canRetry, err := p(cn, cmds)
 		c.releaseConnStrict(cn, err)
 
 		if !canRetry || !internal.IsRetryableError(err, true) {
@@ -359,10 +291,8 @@ func (c *baseClient) generalProcessPipeline(
 	return cmdsFirstErr(cmds)
 }
 
-func (c *baseClient) pipelineProcessCmds(
-	ctx context.Context, cn *pool.Conn, cmds []Cmder,
-) (bool, error) {
-	err := cn.WithWriter(ctx, c.opt.WriteTimeout, func(wr *proto.Writer) error {
+func (c *baseClient) pipelineProcessCmds(cn *pool.Conn, cmds []Cmder) (bool, error) {
+	err := cn.WithWriter(c.opt.WriteTimeout, func(wr *proto.Writer) error {
 		return writeCmd(wr, cmds...)
 	})
 	if err != nil {
@@ -370,7 +300,7 @@ func (c *baseClient) pipelineProcessCmds(
 		return true, err
 	}
 
-	err = cn.WithReader(ctx, c.opt.ReadTimeout, func(rd *proto.Reader) error {
+	err = cn.WithReader(c.opt.ReadTimeout, func(rd *proto.Reader) error {
 		return pipelineReadCmds(rd, cmds)
 	})
 	return true, err
@@ -386,10 +316,8 @@ func pipelineReadCmds(rd *proto.Reader, cmds []Cmder) error {
 	return nil
 }
 
-func (c *baseClient) txPipelineProcessCmds(
-	ctx context.Context, cn *pool.Conn, cmds []Cmder,
-) (bool, error) {
-	err := cn.WithWriter(ctx, c.opt.WriteTimeout, func(wr *proto.Writer) error {
+func (c *baseClient) txPipelineProcessCmds(cn *pool.Conn, cmds []Cmder) (bool, error) {
+	err := cn.WithWriter(c.opt.WriteTimeout, func(wr *proto.Writer) error {
 		return txPipelineWriteMulti(wr, cmds)
 	})
 	if err != nil {
@@ -397,7 +325,7 @@ func (c *baseClient) txPipelineProcessCmds(
 		return true, err
 	}
 
-	err = cn.WithReader(ctx, c.opt.ReadTimeout, func(rd *proto.Reader) error {
+	err = cn.WithReader(c.opt.ReadTimeout, func(rd *proto.Reader) error {
 		err := txPipelineReadQueued(rd, cmds)
 		if err != nil {
 			setCmdsErr(cmds, err)
@@ -455,17 +383,13 @@ func txPipelineReadQueued(rd *proto.Reader, cmds []Cmder) error {
 
 //------------------------------------------------------------------------------
 
-type client struct {
-	baseClient
-	cmdable
-	hooks
-}
-
 // Client is a Redis client representing a pool of zero or more
 // underlying connections. It's safe for concurrent use by multiple
 // goroutines.
 type Client struct {
-	*client
+	baseClient
+	cmdable
+
 	ctx context.Context
 }
 
@@ -474,20 +398,19 @@ func NewClient(opt *Options) *Client {
 	opt.init()
 
 	c := Client{
-		client: &client{
-			baseClient: baseClient{
-				opt:      opt,
-				connPool: newConnPool(opt),
-			},
+		baseClient: baseClient{
+			opt:      opt,
+			connPool: newConnPool(opt),
 		},
 	}
+	c.baseClient.init()
 	c.init()
 
 	return &c
 }
 
 func (c *Client) init() {
-	c.cmdable = c.Process
+	c.cmdable.setProcessor(c.Process)
 }
 
 func (c *Client) Context() context.Context {
@@ -501,36 +424,15 @@ func (c *Client) WithContext(ctx context.Context) *Client {
 	if ctx == nil {
 		panic("nil context")
 	}
-	clone := *c
-	clone.ctx = ctx
-	return &clone
+	c2 := c.clone()
+	c2.ctx = ctx
+	return c2
 }
 
-// Do creates a Cmd from the args and processes the cmd.
-func (c *Client) Do(args ...interface{}) *Cmd {
-	return c.DoContext(c.ctx, args...)
-}
-
-func (c *Client) DoContext(ctx context.Context, args ...interface{}) *Cmd {
-	cmd := NewCmd(args...)
-	_ = c.ProcessContext(ctx, cmd)
-	return cmd
-}
-
-func (c *Client) Process(cmd Cmder) error {
-	return c.ProcessContext(c.ctx, cmd)
-}
-
-func (c *Client) ProcessContext(ctx context.Context, cmd Cmder) error {
-	return c.hooks.process(ctx, cmd, c.baseClient.process)
-}
-
-func (c *Client) processPipeline(ctx context.Context, cmds []Cmder) error {
-	return c.hooks.processPipeline(ctx, cmds, c.baseClient.processPipeline)
-}
-
-func (c *Client) processTxPipeline(ctx context.Context, cmds []Cmder) error {
-	return c.hooks.processPipeline(ctx, cmds, c.baseClient.processTxPipeline)
+func (c *Client) clone() *Client {
+	cp := *c
+	cp.init()
+	return &cp
 }
 
 // Options returns read-only Options that were used to create the client.
@@ -559,7 +461,7 @@ func (c *Client) Pipeline() Pipeliner {
 	pipe := Pipeline{
 		exec: c.processPipeline,
 	}
-	pipe.init()
+	pipe.statefulCmdable.setProcessor(pipe.Process)
 	return &pipe
 }
 
@@ -572,7 +474,7 @@ func (c *Client) TxPipeline() Pipeliner {
 	pipe := Pipeline{
 		exec: c.processTxPipeline,
 	}
-	pipe.init()
+	pipe.statefulCmdable.setProcessor(pipe.Process)
 	return &pipe
 }
 
@@ -638,28 +540,21 @@ func (c *Client) PSubscribe(channels ...string) *PubSub {
 // Conn is like Client, but its pool contains single connection.
 type Conn struct {
 	baseClient
-	cmdable
 	statefulCmdable
 }
 
 func newConn(opt *Options, cn *pool.Conn) *Conn {
+	connPool := pool.NewSingleConnPool(nil)
+	connPool.SetConn(cn)
 	c := Conn{
 		baseClient: baseClient{
 			opt:      opt,
-			connPool: pool.NewSingleConnPool(cn),
+			connPool: connPool,
 		},
 	}
-	c.cmdable = c.Process
-	c.statefulCmdable = c.Process
+	c.baseClient.init()
+	c.statefulCmdable.setProcessor(c.Process)
 	return &c
-}
-
-func (c *Conn) Process(cmd Cmder) error {
-	return c.ProcessContext(context.TODO(), cmd)
-}
-
-func (c *Conn) ProcessContext(ctx context.Context, cmd Cmder) error {
-	return c.baseClient.process(ctx, cmd)
 }
 
 func (c *Conn) Pipelined(fn func(Pipeliner) error) ([]Cmder, error) {
@@ -670,7 +565,7 @@ func (c *Conn) Pipeline() Pipeliner {
 	pipe := Pipeline{
 		exec: c.processPipeline,
 	}
-	pipe.init()
+	pipe.statefulCmdable.setProcessor(pipe.Process)
 	return &pipe
 }
 
@@ -683,6 +578,6 @@ func (c *Conn) TxPipeline() Pipeliner {
 	pipe := Pipeline{
 		exec: c.processTxPipeline,
 	}
-	pipe.init()
+	pipe.statefulCmdable.setProcessor(pipe.Process)
 	return &pipe
 }

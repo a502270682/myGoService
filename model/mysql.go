@@ -1,10 +1,10 @@
 package model
 
 import (
-	"github.com/go-xorm/xorm"
-	"myGoService/config"
 	_ "github.com/go-sql-driver/mysql"
-	"qxf-backend/logger"
+	"github.com/go-xorm/xorm"
+	logger "github.com/sirupsen/logrus"
+	"myGoService/config"
 	"time"
 )
 

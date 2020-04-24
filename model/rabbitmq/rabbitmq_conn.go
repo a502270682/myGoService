@@ -1,9 +1,9 @@
 package rabbitmq
 
 import (
+	logger "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"myGoService/config"
-	"qxf-backend/logger"
 	"sync"
 	"time"
 )
