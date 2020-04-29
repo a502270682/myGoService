@@ -19,8 +19,8 @@ const (
 var conf *Config
 
 type Config struct {
-	LocalProjectPort string `json:"local_project_port"`
-	Env              string `json:"env"`
+	Port string `json:"port"`
+	Env  string `json:"env"`
 	// mysql
 	MysqlConnDsn string `json:"mysql_conn_dsn"`
 	// redis

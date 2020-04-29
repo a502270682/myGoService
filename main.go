@@ -18,9 +18,9 @@ func main() {
 	config.Init("./config/local_project.conf")
 	s := service.NewService()
 	rabbitmq.RabbitMessageQueueInit()
-	s.Wf.Router.Run(config.Instance().LocalProjectPort)
+	s.Wf.Router.Run(config.Instance().Port)
 	srv := &http.Server{
-		Addr: config.Instance().LocalProjectPort,
+		Addr: config.Instance().Port,
 		Handler: s.Wf.Router,
 	}
 	signals := make(chan os.Signal, 1)
